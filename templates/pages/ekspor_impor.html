@@ -1,0 +1,243 @@
+{% extends 'layouts/base.html' %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header p-3">
+                    <h5 class="mb-0">Dashboard Analisis Ekspor Impor (2020-2025)</h5>
+                    <p class="text-sm mb-0">
+                        Visualisasi interaktif dari data Excel Ekspor-Impor Provinsi Lampung.
+                    </p>
+                </div>
+                <div class="card-body p-3">
+                    <!-- Debug Info (hapus ini setelah testing) -->
+                    <div class="alert alert-info">
+                        <strong>Debug Info:</strong>
+                        Available graphs: {{ graphs.keys() | list | join(', ') }}
+                    </div>
+                    
+                    <!-- Navigasi Tab -->
+                    <ul class="nav nav-tabs" id="dashboardTab" role="tablist">
+                        {% for name in sheet_names %}
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link {% if loop.first %}active{% endif %}" 
+                                    id="tab-{{ name|replace(' ', '-')|replace('&', '') }}" 
+                                    data-bs-toggle="tab" 
+                                    data-bs-target="#content-{{ name|replace(' ', '-')|replace('&', '') }}" 
+                                    type="button" 
+                                    role="tab" 
+                                    aria-controls="content-{{ name|replace(' ', '-')|replace('&', '') }}" 
+                                    aria-selected="{% if loop.first %}true{% else %}false{% endif %}">
+                                {{ name }}
+                            </button>
+                        </li>
+                        {% endfor %}
+                    </ul>
+
+                    <!-- Konten Tab -->
+                    <div class="tab-content" id="dashboardTabContent">
+                        {% for name in sheet_names %}
+                        <div class="tab-pane fade {% if loop.first %}show active{% endif %}" 
+                             id="content-{{ name|replace(' ', '-')|replace('&', '') }}" 
+                             role="tabpanel" 
+                             aria-labelledby="tab-{{ name|replace(' ', '-')|replace('&', '') }}">
+                            <div class="p-3">
+                                
+                                <!-- Konten Khusus untuk Tab 'Periode & Neraca Perdagangan' -->
+                                {% if name == 'Periode & Neraca Perdagangan' %}
+                                <div class="row mt-4">
+                                    <!-- Grafik Tren Tahunan -->
+                                    <div class="col-lg-7 mb-lg-0 mb-4">
+                                        <div class="card z-index-2">
+                                            <div class="card-header p-3">
+                                                <h6>Grafik Tren Tahunan Ekspor & Impor</h6>
+                                            </div>
+                                            <div class="card-body p-3">
+                                                {% if graphs.tren_tahunan %}
+                                                    <div id="grafik-tren-tahunan" style="height:400px;"></div>
+                                                {% else %}
+                                                    <div class="alert alert-warning">
+                                                        <strong>Info:</strong> Data grafik tren tahunan tidak tersedia. 
+                                                        Pastikan sheet 'Periode & Neraca Perdagangan' memiliki kolom yang diperlukan.
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Grafik Neraca Perdagangan -->
+                                    <div class="col-lg-5">
+                                        <div class="card z-index-2">
+                                            <div class="card-header p-3">
+                                                <h6>Grafik Neraca Perdagangan Tahunan</h6>
+                                            </div>
+                                            <div class="card-body p-3">
+                                                {% if graphs.neraca_tahunan %}
+                                                    <div id="grafik-neraca-tahunan" style="height:400px;"></div>
+                                                {% else %}
+                                                    <div class="alert alert-warning">
+                                                        <strong>Info:</strong> Data grafik neraca perdagangan tidak tersedia.
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+
+                                <!-- Konten Khusus untuk Tab 'FOB Negara (Ekspor-Impor)' -->
+                                {% if name == 'FOB Negara (Ekspor-Impor)' %}
+                                <div class="row mt-4">
+                                    <div class="col-12">
+                                        <div class="card z-index-2">
+                                            <div class="card-header p-3">
+                                                <h6>Grafik Ekspor-Impor per Negara</h6>
+                                            </div>
+                                            <div class="card-body p-3">
+                                                {% if graphs.ekspor_impor_negara %}
+                                                    <div id="grafik-ekspor-impor-negara" style="height:500px;"></div>
+                                                {% else %}
+                                                    <div class="alert alert-warning">
+                                                        <strong>Info:</strong> Data grafik ekspor-impor per negara tidak tersedia.
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+
+                                <!-- Tabel Data untuk setiap tab -->
+                                <h4 class="mt-4">Tabel Data: {{ name }}</h4>
+                                <div class="table-responsive mt-2">
+                                    {{ tables[name]|safe }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block javascripts %}
+{{ super() }}
+<!-- Plotly chart -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+<!-- jQuery & DataTables JS -->
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+    $(document).ready(function () {
+        console.log("Document ready, initializing charts and tables...");
+        
+        // Fungsi untuk render grafik dengan error handling
+        function renderChart(elementId, graphData, chartName) {
+            try {
+                if (graphData) {
+                    console.log(`Rendering ${chartName}...`);
+                    console.log(`Data for ${chartName}:`, graphData);
+                    
+                    const parsedData = JSON.parse(graphData);
+                    Plotly.newPlot(elementId, parsedData.data, parsedData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false,
+                        modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+                    });
+                    
+                    console.log(`${chartName} rendered successfully`);
+                } else {
+                    console.warn(`No data available for ${chartName}`);
+                }
+            } catch (e) {
+                console.error(`Error rendering ${chartName}:`, e);
+                // Tampilkan pesan error di container
+                document.getElementById(elementId).innerHTML = 
+                    `<div class="alert alert-danger">Error loading chart: ${e.message}</div>`;
+            }
+        }
+        
+        // Render semua grafik
+        {% if graphs.tren_tahunan %}
+        renderChart('grafik-tren-tahunan', {{ graphs.tren_tahunan | tojson | safe }}, 'Tren Tahunan');
+        {% endif %}
+
+        {% if graphs.neraca_tahunan %}
+        renderChart('grafik-neraca-tahunan', {{ graphs.neraca_tahunan | tojson | safe }}, 'Neraca Tahunan');
+        {% endif %}
+
+        {% if graphs.ekspor_impor_negara %}
+        renderChart('grafik-ekspor-impor-negara', {{ graphs.ekspor_impor_negara | tojson | safe }}, 'Ekspor Impor Negara');
+        {% endif %}
+        
+        console.log("Chart rendering completed.");
+
+        // Inisialisasi DataTable dengan delay untuk memastikan DOM sudah ready
+        setTimeout(function() {
+            try {
+                $('.datatable-class').each(function() {
+                    if (!$.fn.DataTable.isDataTable(this)) {
+                        $(this).DataTable({
+                            "scrollX": true,
+                            "pageLength": 10,
+                            "lengthMenu": [10, 25, 50, 100],
+                            "language": { 
+                                "search": "Cari:",
+                                "lengthMenu": "Tampilkan _MENU_ data",
+                                "info": "Menampilkan _START_ sampai _END_ dari _TOTAL_ data",
+                                "paginate": {
+                                    "first": "Pertama",
+                                    "last": "Terakhir",
+                                    "next": "Berikutnya",
+                                    "previous": "Sebelumnya"
+                                },
+                                "emptyTable": "Tidak ada data yang tersedia",
+                                "zeroRecords": "Tidak ditemukan data yang sesuai"
+                            }
+                        });
+                    }
+                });
+                console.log("DataTables initialized successfully");
+            } catch(e) {
+                console.error("Error initializing DataTables:", e);
+            }
+        }, 500);
+
+        // Event handler untuk resize grafik saat tab berubah
+        $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+            console.log("Tab changed, resizing charts...");
+            // Trigger resize untuk semua grafik Plotly
+            setTimeout(function() {
+                try {
+                    Plotly.Plots.resize('grafik-tren-tahunan');
+                    Plotly.Plots.resize('grafik-neraca-tahunan');
+                    Plotly.Plots.resize('grafik-ekspor-impor-negara');
+                } catch(e) {
+                    console.log("Chart resize error (normal if chart doesn't exist):", e.message);
+                }
+            }, 100);
+        });
+
+        // Window resize handler
+        $(window).on('resize', function() {
+            try {
+                Plotly.Plots.resize('grafik-tren-tahunan');
+                Plotly.Plots.resize('grafik-neraca-tahunan');
+                Plotly.Plots.resize('grafik-ekspor-impor-negara');
+            } catch(e) {
+                console.log("Window resize error (normal if chart doesn't exist):", e.message);
+            }
+        });
+    });
+</script>
+{% endblock javascripts %}
